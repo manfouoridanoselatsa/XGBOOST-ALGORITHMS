@@ -15,15 +15,23 @@
 #include "xgb.h"
 
 static struct timeval _t1, _t2;
+static struct timeval _t3, _t4;
 static struct timezone _tz;
 
 #define top1() gettimeofday(&_t1, &_tz)
 #define top2() gettimeofday(&_t2, &_tz)
 
+#define top3() gettimeofday(&_t3, &_tz)
+#define top4() gettimeofday(&_t4, &_tz)
  long cpu_time(void) /* retourne des microsecondes */
 {
    return 1000000L * _t2.tv_sec + _t2.tv_usec -
            (1000000L * _t1.tv_sec + _t1.tv_usec );
+}
+ long cpu_time_2(void) /* retourne des microsecondes */
+{
+   return 1000000L * _t4.tv_sec + _t4.tv_usec -
+           (1000000L * _t3.tv_sec + _t3.tv_usec );
 }
 
 // structure pour parallelisation
@@ -69,7 +77,7 @@ TreeGenerator::TreeGenerator(std::vector<std::vector<double>>& x, std::vector<do
 	this->subsample_cols =subsample_cols;
 	this->num_threads = num_threads;
 	this->choice = choice;
-	this->column_subsample = col_subsample(true);
+	this->column_subsample = col_subsample(false);
 	
 	if(this->choice == 0){
 	   this->find_varsplit_seq();
@@ -162,11 +170,10 @@ void bestSplit(std::mutex& m,split_data data){
 			data.treeGen->tree[data.node_idx].score  = curr_score;
 			data.treeGen->tree[data.node_idx].split = data.xsplit[r];
 			data.treeGen->lhsF.clear();
-			data.treeGen->lhsF.clear();
+			data.treeGen->rhsF.clear();
 			data.treeGen->lhsF = lhs_indices;
 			data.treeGen->rhsF = rhs_indices;
 		}
-		
 		m.unlock();
 		
 		lhs_indices.clear();
@@ -213,7 +220,7 @@ void TreeGenerator::find_greedy_split_par(int node_idx){
 	std::mutex mutex_variable;
 	
 	
-	for (int c = 0;c < this->column_subsample.size();c++ ){
+	for (int c = 0;c < (this->column_subsample).size();c++ ){
 		std::vector<double> xsplit;
 		
 		// on selectionne les valeurs d'une caracteristiques donnee suivant un certain nombre d'indice
@@ -240,9 +247,9 @@ void TreeGenerator::find_greedy_split_par(int node_idx){
 	
 	//ajout des noeuds gauche et droit dans notre arbre
 	int left_child_idx = tree.size();
-	tree.emplace_back(Node(thread_data.treeGen->lhsF,tree[node_idx].depth+1,0.0, -10000.0,-1, 0.0, -1,-1));
+	tree.emplace_back(Node(thread_data.treeGen->lhsF,tree[node_idx].depth+1,0.0, -1000.0,-1, 0.0, -1,-1));
 	int right_child_idx = tree.size();
-	tree.emplace_back(Node(thread_data.treeGen->rhsF,tree[node_idx].depth+1,0.0, -10000.0,-1, 0.0, -1,-1));
+	tree.emplace_back(Node(thread_data.treeGen->rhsF,tree[node_idx].depth+1,0.0, -1000.0,-1, 0.0, -1,-1));
 	
 	//std::cout<<node_idx<<" "<<node_tree_size<<" "<<tree[node_idx].idxs[0]<<" "<<tree[node_idx].idxs[1]<<" "<<tree.size()<<std::endl;
 	
@@ -259,7 +266,7 @@ void TreeGenerator::find_greedy_split_par(int node_idx){
 
 void TreeGenerator::find_varsplit_par(){
 
-    tree.emplace_back(Node(this->idxs, 0, 0.0,-10000.0,-1, 0.0, -1,-1));
+    tree.emplace_back(Node(this->idxs, 0, 0.0,-1000.0-1, 0.0, -1,-1));
     node_stack.push(0);
     
     
@@ -279,7 +286,7 @@ void TreeGenerator::find_varsplit_par(){
 
 void bestSplit_feat(std::mutex& m,split_data data){
 
-	for (int c = data.thread_id;c < data.treeGen->column_subsample.size();c+= data.num_threads ){
+	for (int c = data.thread_id;c < (data.treeGen->column_subsample).size();c+= data.num_threads ){
 		std::vector<double> xsplit;
 		
 		// on selectionne les valeurs d'une caracteristiques donnee suivant un certain nombre d'indice
@@ -320,15 +327,14 @@ void bestSplit_feat(std::mutex& m,split_data data){
 				continue;
 				
 			}*/
-			m.lock();
 			double  curr_score = data.treeGen->gain(lhs,rhs,data.node_idx);
-
+			m.lock();
 			if (curr_score > data.treeGen->tree[data.node_idx].score){
 				data.treeGen->tree[data.node_idx].var_idx = data.treeGen->column_subsample[c];
 				data.treeGen->tree[data.node_idx].score  = curr_score;
 				data.treeGen->tree[data.node_idx].split = xsplit[r];
 				data.treeGen->lhsF.clear();
-				data.treeGen->lhsF.clear();
+				data.treeGen->rhsF.clear();
 				data.treeGen->lhsF = lhs_indices;
 				data.treeGen->rhsF = rhs_indices;
 			}
@@ -392,9 +398,9 @@ void TreeGenerator::find_greedy_split_par_feat(int node_idx){
 	
 	//ajout des noeuds gauche et droit dans notre arbre
 	int left_child_idx = tree.size();
-	tree.emplace_back(Node(thread_data.treeGen->lhsF,tree[node_idx].depth+1,0.0, -10000.0,-1, 0.0, -1,-1));
+	tree.emplace_back(Node(thread_data.treeGen->lhsF,tree[node_idx].depth+1,0.0, -1000.0,-1, 0.0, -1,-1));
 	int right_child_idx = tree.size();
-	tree.emplace_back(Node(thread_data.treeGen->rhsF,tree[node_idx].depth+1,0.0, -10000.0,-1, 0.0, -1,-1));
+	tree.emplace_back(Node(thread_data.treeGen->rhsF,tree[node_idx].depth+1,0.0, -1000.0,-1, 0.0, -1,-1));
 	
 	//std::cout<<node_idx<<" "<<node_tree_size<<" "<<tree[node_idx].idxs[0]<<" "<<tree[node_idx].idxs[1]<<" "<<tree.size()<<std::endl;
 	
@@ -411,7 +417,7 @@ void TreeGenerator::find_greedy_split_par_feat(int node_idx){
 
 void TreeGenerator::find_varsplit_par_feat(){
 
-    tree.emplace_back(Node(this->idxs, 0, 0.0,-10000.0,-1, 0.0, -1,-1));
+    tree.emplace_back(Node(this->idxs, 0, 0.0,-1000.0,-1, 0.0, -1,-1));
     node_stack.push(0);
     
     
@@ -492,7 +498,7 @@ void TreeGenerator::find_greedy_split_seq(int node_idx){
 			
 			double  curr_score = this->gain(lhs,rhs,node_idx);
 			
-			if (curr_score > tree[node_idx].score){
+			if (curr_score > tree[node_idx].score /*&& lhs_indices.size() != 0 && rhs_indices.size() != 0*/){
 				tree[node_idx].var_idx = c;
 				tree[node_idx].score  = curr_score;
 				tree[node_idx].split = xsplit[r];
@@ -514,9 +520,9 @@ void TreeGenerator::find_greedy_split_seq(int node_idx){
 	//if(lhsF.size() != 0 && rhsF.size() != 0){
 	//ajout des noeuds gauche et droit dans notre arbre
 	int left_child_idx = tree.size();
-	tree.emplace_back(Node(lhsF,tree[node_idx].depth+1,0.0, -10000.0,-1, 0.0, -1,-1));
+	tree.emplace_back(Node(lhsF,tree[node_idx].depth+1,0.0, -1000.0,-1, 0.0, -1,-1));
 	int right_child_idx = tree.size();
-	tree.emplace_back(Node(rhsF,tree[node_idx].depth+1,0.0, -10000.0,-1, 0.0, -1,-1));
+	tree.emplace_back(Node(rhsF,tree[node_idx].depth+1,0.0, -1000.0,-1, 0.0, -1,-1));
 	
 	//std::cout<<node_idx<<" "<<node_tree_size<<" "<<tree[node_idx].idxs[0]<<" "<<tree[node_idx].idxs[1]<<" "<<tree.size()<<std::endl;
 	
@@ -525,14 +531,12 @@ void TreeGenerator::find_greedy_split_seq(int node_idx){
 
 	node_stack.push(left_child_idx);
 	node_stack.push(right_child_idx);
-	//}else{
-	//	return;
 	//}
 }
 
 void TreeGenerator::find_varsplit_seq(){
 
-    tree.emplace_back(Node(this->idxs, 0, 0.0,-10000.0,-1, 0.0, -1,-1));
+    tree.emplace_back(Node(this->idxs, 0, 0.0,-1000.0,-1, 0.0, -1,-1));
     node_stack.push(0);
     do{
     	// ici on continu l'entrainnement
@@ -568,6 +572,7 @@ double TreeGenerator::gain(std::vector<bool>& lhs,std::vector<bool>& rhs,int nod
 			rhs_hessian += hessian[i];
 		}
 	}
+	//std::cout<< rhs_gradient <<" "<<lhs_gradient<<std::endl;
 	
 	double gain = 0.5*(((lhs_gradient*lhs_gradient)/(lhs_hessian + this->lambda)) + ((rhs_gradient*rhs_gradient)/(rhs_hessian + this->lambda)) - (((lhs_gradient + rhs_gradient)*(lhs_gradient + rhs_gradient))/(lhs_hessian + rhs_hessian + this->lambda))) - this->gamma;
 	gradient.clear();
@@ -594,7 +599,7 @@ double TreeGenerator::predict_row(std::vector<double>& xi){
 	int tree_size = tree.size();
 	for(int i=0;i<tree_size;i++){
 		
-		if(tree[node_idx].var_idx == -1 && tree[node_idx].val != -10000.0){
+		if(tree[node_idx].var_idx == -1 && tree[node_idx].val >= -10000.0){
 			return tree[node_idx].val;
 		}else{
 			if(xi[node.var_idx]<= node.split){
@@ -691,9 +696,7 @@ void XGBoostClassifier::observation_subsample(std::vector<std::vector<double>>& 
 	}
 }
 		
-void XGBoostClassifier::fit(std::vector<std::vector<double>>& x, std::vector<int>& y,double subsample_cols = 0.8 , int min_child_weight = 1, int depth = 8,int min_leaf = 1,double learning_rate = 0.4, int trees = 5,double lambda = 1, double gamma = 1,int num_threads=4,int choice=0){
-	//this->x= x;
-	//this->y=y;
+std::vector<double>  XGBoostClassifier::fit(std::vector<std::vector<double>>& x, std::vector<int>& y,double subsample_cols = 0.8 , int min_child_weight = 1, int depth = 8,int min_leaf = 1,double learning_rate = 0.4, int trees = 5,double lambda = 1, double gamma = 1,int num_threads=4,int choice=0){
 	observation_subsample(x,y,0.5,false);    
         int x_size  = (this->x).size();
 	
@@ -701,7 +704,7 @@ void XGBoostClassifier::fit(std::vector<std::vector<double>>& x, std::vector<int
 	this->base_pred = base_pred;
 	
 	std::vector<int> root_idxs(x_size);
-    	std::iota(root_idxs.begin(), root_idxs.end(), 0);
+    std::iota(root_idxs.begin(), root_idxs.end(), 0);
     	
 	this->depth=depth;
 	this->subsample_cols = subsample_cols;
@@ -713,12 +716,29 @@ void XGBoostClassifier::fit(std::vector<std::vector<double>>& x, std::vector<int
 	this->gamma = gamma;
 	this->min_child_weight = min_child_weight;
 	
-	
-	
+	std::string outputFileName= "outputTreePerTime"+std::to_string(choice)+".csv";
+	std::ofstream csvFile(outputFileName, std::ios::out);
+
+	// Check if the file was opened successfully
+	if (!csvFile.is_open()) {
+		std::cerr << "Error: Unable to open the CSV file." << std::endl;
+	}
+	// Write the header row
+	csvFile << "NumArbre,ExecutionTime" << std::endl;
+
+	std::vector<double> loss;
 	for(int treeUnit = 0; treeUnit < this->trees; treeUnit++) {
 		std::vector<double> Grad,Hess;
 		grad_hess(this->base_pred,this->y,Grad,Hess);
+		
+		top1();
 		TreeGenerator tree(this->x, Grad, Hess,root_idxs,this->subsample_cols, this->min_leaf,this->min_child_weight, this->depth, this->lambda, this->gamma,num_threads,choice);
+		top2();
+		
+		long temps = cpu_time();
+		
+		double temps_double_data = temps/1000.0 + temps%1000;
+		csvFile <<treeUnit<<","<<temps_double_data<< std::endl;
 		
 		std::vector<double> y_pred = tree.predict(this->x);
 		
@@ -727,13 +747,43 @@ void XGBoostClassifier::fit(std::vector<std::vector<double>>& x, std::vector<int
 		}
 		
 		this->estimators.emplace_back(tree);
+		
+		double loss_value = 0.0;
+		
+		double sum_squared_error = 0.0;
+		for (size_t i = 0; i < x_size; i++) {
+			double error = y[i] - y_pred[i];
+			sum_squared_error += error * error;
+		}
+
+		double mean_squared_error = sum_squared_error / x_size;
+		loss_value=sqrt(mean_squared_error);
+		
+		/*for (int i = 0; i < x_size; i++) {
+			if (this->base_pred[i] <= 0.0) {
+			    loss_value += -log(1e-15);
+			} else if (this->base_pred[i] >= 1.0) {
+			    loss_value += -log(1.0 - 1e-15);
+			} else {
+			    loss_value += -y[i] * log(this->base_pred[i]) - (1.0 - y[i]) * log(1.0 - this->base_pred[i]);
+			}
+		}*/
+		
+		
+		
+		//std::cout<<"\n"<<loss_value<<"\n";
+		loss.push_back(loss_value);
+		
 		y_pred.clear();
 		Grad.clear();
 		Hess.clear();
 	}
 	
+	// Fermer le fichier
+	csvFile.close();
 	base_pred.clear();
 	
+	return loss;
 }
 		
 std::vector<double> XGBoostClassifier::predict_proba(std::vector<std::vector<double>> x){
@@ -832,7 +882,6 @@ std::vector<int> calculate_confusion_matrix(std::vector<int> true_labels, std::v
         }else{
         	predicted_label = 0;
         }
-        //printf("%d %d\n",predicted_label,true_label);
         
         confusion_matrix[true_label * 2 + predicted_label]++;
     }
@@ -840,14 +889,7 @@ std::vector<int> calculate_confusion_matrix(std::vector<int> true_labels, std::v
     return  confusion_matrix;
 }
 
-double calculate_accuracy(std::vector<int> confusion_matrix) {
-    int true_positive = confusion_matrix[3];
-    int true_negative = confusion_matrix[0];
-    int total_samples = true_positive + true_negative+confusion_matrix[1]+confusion_matrix[2];
-    printf("Individus: %d\n", total_samples);
-    double accuracy = (double)(true_positive + true_negative) / total_samples;
-    return accuracy;
-}
+
 
 
 void print_confusion_matrix(std::vector<int> confusion_matrix) {
@@ -858,6 +900,31 @@ void print_confusion_matrix(std::vector<int> confusion_matrix) {
     printf("       1  %d     %d\n", confusion_matrix[2], confusion_matrix[3]);
 }
     
+double calculate_accuracy(std::vector<int> confusion_matrix) {
+    int true_positive = confusion_matrix[3];
+    int true_negative = confusion_matrix[0];
+    int total_samples = true_positive + true_negative+confusion_matrix[1]+confusion_matrix[2];
+    printf("Individus: %d\n", total_samples);
+    double accuracy = (double)(true_positive + true_negative) / total_samples;
+    return accuracy;
+}
+
+double calculate_recall(std::vector<int> confusion_matrix) {
+    int true_positive = confusion_matrix[3];
+    int true_negative = confusion_matrix[0];
+    int false_negative = confusion_matrix[1];
+    double recall = (double)(true_positive)/(true_positive+false_negative);
+    return recall;
+}
+
+double calculate_precision(std::vector<int> confusion_matrix) {
+    int true_positive = confusion_matrix[3];
+    int true_negative = confusion_matrix[0];
+    int false_positive = confusion_matrix[2];
+    double precision = (double)(true_positive)/(true_positive+false_positive);
+    return precision;
+}
+
 
 int main(int argc, char * argv[]) {
 /*
@@ -915,64 +982,105 @@ int main(int argc, char * argv[]) {
 	std::vector<int> y;
 
 	for(int i=0; i<yTemp.size();i++){
-	y.push_back(((int)yTemp[i][0]));
-
+		y.push_back(((int)yTemp[i][0]));
 	}
-
+	
+	
 	// execution sequentielle
 	std::cout<<"sequential execution in progress..."<<std::endl;
 	XGBoostClassifier xgb;
-	top1();
-	xgb.fit(x, y,1,1,8,1,0.1,100,0.2, 0.1,num_threads,0);
-	top2();
-
-	long temps = cpu_time();
+	top3();
+	std::vector<double> loss = xgb.fit(x, y,1,1,8,1,0.1,100,0.2, 0.1,num_threads,1);
+	top4();
+	
+	long temps = cpu_time_2();
 	printf("\ntime seq = %ld.%03ldms\n\n", temps/1000, temps%1000);
-
 	printf("\n");
-
-	// execution parallel par feature
-	/*std::cout<<"parallel execution per feature in progress..."<<std::endl;
-	XGBoostClassifier xgb1;
-	top1();
-	xgb1.fit(x, y,1,1,8,1,0.1,100,0.2, 0.1,num_threads,1);
-	top2();
-
-	long temps1 = cpu_time();
-	printf("\ntime par feat = %ld.%03ldms\n\n", temps1/1000, temps1%1000);
 	
-	printf("\n");
-	*/
+	/*std::string outputFileNameLoss= "outputPerLossPerTree.csv";
+	std::ofstream csvFileLoss(outputFileNameLoss, std::ios::out);
+	// Check if the file was opened successfully
+	if (!csvFileLoss.is_open()) {
+		std::cerr << "Error: Unable to open the CSV file." << std::endl;
+		return 1;
+	}
 	
-	// execution parallel par split point
-	std::cout<<"parallel execution per split point in progress..."<<std::endl;
-	XGBoostClassifier xgb2;
-	top1();
-	xgb2.fit(x, y,1,1,8,1,0.1,100,0.2, 0.1,num_threads,2);
-	top2();
-
-	long temps2 = cpu_time();
-	printf("\ntime par split point = %ld.%03ldms\n\n", temps2/1000, temps2%1000);
+	int loss_size = loss.size();
+	for(int i=0;i<loss_size;i++){
+		csvFileLoss<<i<<","<<loss[i]<< std::endl;
+	}
+	csvFileLoss.close();
 	
-	// calcul des speedUp
-	//float speedUpFeat =  (temps/1000.0 + temps%1000)/(temps1/1000.0 + temps1%1000);
-	//printf("\nspeedUp feature %.8f\n\n",speedUpFeat);
 	
-	float speedUpSplitPoint =  (temps/1000.0 + temps%1000)/(temps2/1000.0 + temps2%1000);
-	printf("\nspeedUp split point %.8f\n\n",speedUpSplitPoint);
+	
+	std::string outputFileName= "outputSPeedUpPerThread.csv";
+	std::ofstream csvFileSPeedUpPerThread(outputFileName, std::ios::out);
 
-	// entrainnement
-	//std::vector<double> loss = tryIt.fit(x,y);
+	// Check if the file was opened successfully
+	if (!csvFileSPeedUpPerThread.is_open()) {
+		std::cerr << "Error: Unable to open the CSV file." << std::endl;
+		return 1;
+	}
+	
+	std::ofstream csvFileLossPar("outputCsvFileLossPar.csv", std::ios::out);
 
+	// Check if the file was opened successfully
+	if (!csvFileLossPar.is_open()) {
+		std::cerr << "Error: Unable to open the CSV file." << std::endl;
+		return 1;
+	}
+	
+	// Write the header row
+	csvFileSPeedUpPerThread << "NumThread,ParallelPerSplitPoint,ParallelPerFeature" << std::endl;
+	csvFileLossPar<<"NumTree,LossParFeat,LossParSplitPoint"<<std::endl;
+	
+	for(int i=2;i<=num_threads;i++){
 
-	// valeur de perte par arbre
-	//for(int i=0; i<n_tree;i++){
-	//   std::cout<<" "<<loss[i];
-	//}
-	//std::cout<<"\n\n\n";
+		// execution parallel par feature
+		std::cout<<"parallel execution per feature in progress..."<<std::endl;
+		XGBoostClassifier xgb1;
+		top3();
+		std::vector<double> loss1 =xgb1.fit(x, y,1,1,8,1,0.1,100,0.2, 0.1,i,1);
+		top4();
+
+		long temps1 = cpu_time_2();
+		printf("\ntime par feat = %ld.%03ldms\n\n", temps1/1000, temps1%1000);
+		
+		printf("\n");
+		
+		// execution parallel par split point
+		std::cout<<"parallel execution per split point in progress..."<<std::endl;
+		XGBoostClassifier xgb2;
+		top3();
+		std::vector<double> loss2 =xgb2.fit(x, y,1,1,8,1,0.1,100,0.2, 0.1,i,2);
+		top4();
+		
+		if(i == num_threads-1){
+			int loss_size1 = loss1.size();
+			for(int i=0;i<loss_size1;i++){
+				csvFileLossPar<<i<<","<<loss1[i]<<","<<loss2[i]<< std::endl;
+			}
+		}
+
+		long temps2 = cpu_time_2();
+		printf("\ntime par split point = %ld.%03ldms\n\n", temps2/1000, temps2%1000);
+		
+		// calcul des speedUp
+		float speedUpFeat =  (temps/1000.0 + temps%1000)/(temps1/1000.0 + temps1%1000);
+		printf("\nspeedUp feature %.8f\n\n",speedUpFeat);
+		
+		float speedUpSplitPoint =  (temps/1000.0 + temps%1000)/(temps2/1000.0 + temps2%1000);
+		printf("\nspeedUp split point %.8f\n\n",speedUpSplitPoint);
+		csvFileSPeedUpPerThread<<i<<","<<speedUpFeat<<","<<speedUpSplitPoint<< std::endl;
+		loss1.clear();
+		loss2.clear();
+	}
+	csvFileLossPar.close();
+	csvFileSPeedUpPerThread.close();*/
 
 
 	//donnee de test
+	
 	filename = "diabetesDataTest.csv";
 	std::vector<std::vector<double>> xTest = extractCSVDataset(filename);
 
@@ -982,7 +1090,7 @@ int main(int argc, char * argv[]) {
 	std::vector<int> yTest;
 
 	for(int i=0; i<yTempTest.size();i++){
-	yTest.push_back(((int)yTempTest[i][0]));
+		yTest.push_back(((int)yTempTest[i][0]));
 	}
 	//prediction des donnees de test
 	std::vector<double>predicted_labels= xgb.predict_proba(xTest);
@@ -995,8 +1103,13 @@ int main(int argc, char * argv[]) {
 	print_confusion_matrix(confusion_matrix);
 
 	double accuracy = calculate_accuracy(confusion_matrix);
-	printf("\n\nAccuracy: %.2f%%\n", accuracy * 100);
+	printf("\n\nAccuracy: %.2f%%\n", accuracy*100);
 
+	double precision = calculate_precision(confusion_matrix);
+	printf("\n\nPrecision: %.2f%%\n", precision*100);
+	
+	double recall = calculate_recall(confusion_matrix);
+	printf("\n\nRecall: %.2f%%\n", recall*100);
 
 	// prediction d'une entree
 	std::vector<std::vector<double>> testData =  {{ 6,154,74,32,193,29.3,0.839,39}};
