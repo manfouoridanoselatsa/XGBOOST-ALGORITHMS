@@ -990,14 +990,14 @@ int main(int argc, char * argv[]) {
 	std::cout<<"sequential execution in progress..."<<std::endl;
 	XGBoostClassifier xgb;
 	top3();
-	std::vector<double> loss = xgb.fit(x, y,1,1,8,1,0.1,100,0.2, 0.1,num_threads,1);
+	std::vector<double> loss = xgb.fit(x, y,1,1,8,1,0.1,100,0.2, 0.1,num_threads,0);
 	top4();
 	
 	long temps = cpu_time_2();
 	printf("\ntime seq = %ld.%03ldms\n\n", temps/1000, temps%1000);
 	printf("\n");
 	
-	/*std::string outputFileNameLoss= "outputPerLossPerTree.csv";
+	std::string outputFileNameLoss= "outputPerLossPerTree.csv";
 	std::ofstream csvFileLoss(outputFileNameLoss, std::ios::out);
 	// Check if the file was opened successfully
 	if (!csvFileLoss.is_open()) {
@@ -1076,7 +1076,7 @@ int main(int argc, char * argv[]) {
 		loss2.clear();
 	}
 	csvFileLossPar.close();
-	csvFileSPeedUpPerThread.close();*/
+	csvFileSPeedUpPerThread.close();
 
 
 	//donnee de test
