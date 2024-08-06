@@ -88,7 +88,7 @@ class XGBoostClassifier{
 		void grad_hess(std::vector<double>& preds,std::vector<int>& labels,std::vector<double> & grads,std::vector<double> & hess);
 		double log_odds(std::vector<int> labels);
 		void observation_subsample(std::vector<std::vector<double>>& x,std::vector<int>& y,double subsample_ratio,bool random_sample);
-		void fit(std::vector<std::vector<double>>& x, std::vector<int>& y,double subsample_cols, int min_child_weight, int depth,int min_leaf,double learning_rate, int trees,double lambda, double gamma,int num_threads,int choice);
+		std::vector<double> fit(std::vector<std::vector<double>>& x, std::vector<int>& y,double subsample_cols, int min_child_weight, int depth,int min_leaf,double learning_rate, int trees,double lambda, double gamma,int num_threads,int choice);
 		std::vector<double> predict_proba(std::vector<std::vector<double>> x);
 		std::vector<int> predict(std::vector<std::vector<double>> x);
 		~XGBoostClassifier() {};
