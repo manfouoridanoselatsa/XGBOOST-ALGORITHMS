@@ -53,11 +53,14 @@ class TreeGenerator{
 	    	void find_greedy_split_par(int node_idx);
 	    	void find_greedy_split_seq(int node_idx);
 	    	void find_greedy_split_par_feat(int node_idx);
+			void find_greedy_split_par_feat_plus_SplitPoint(int node_idx);
+
 	    	std::vector<int> col_subsample(bool random_col);
 	    	double compute_gamma( std::vector<double>& gradient, std::vector<double>& hessian);
 	    	void find_varsplit_par();
 	    	void find_varsplit_seq();
 	    	void find_varsplit_par_feat();
+			void find_varsplit_par_feat_plus_SplitPoint();
 	    	double gain(std::vector<bool>& lhs,std::vector<bool>& rhs,int node_idx);
 	    	std::vector<double> predict(std::vector<std::vector<double>>& x);
 	    	double predict_row(std::vector<double>& xi);
