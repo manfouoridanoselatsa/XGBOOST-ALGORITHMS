@@ -83,8 +83,10 @@ TreeGenerator::TreeGenerator(std::vector<std::vector<double>>& x, std::vector<do
 	   this->find_varsplit_seq();
 	}else if(this->choice == 1){
 	   this->find_varsplit_par_feat();
-	}else{
+	}else if(this->choice == 2){
 	   this->find_varsplit_par();
+	}else{
+		this->find_varsplit_par_feat_plus_SplitPoint();
 	}
 	//this->printNode();
 	
@@ -195,17 +197,14 @@ void TreeGenerator::find_greedy_split_par(int node_idx){
 	
 	for(int i : tree[node_idx].idxs){
 		gradientS.emplace_back(this->gradient[i]);
-		hessianS.emplace_back(this->hessian[i]);
-		//std::cout<<i<<" ";		
+		hessianS.emplace_back(this->hessian[i]);		
 	}
-	//std::cout<<std::endl;
 	
 	
 	int node_tree_size = tree[node_idx].idxs.size();
 	
 	tree[node_idx].val = this->compute_gamma(gradientS,hessianS);
 	if(node_tree_size <= 1 || tree[node_idx].depth >= this->depth-1){
-
 		return;
 	}
 	
@@ -232,7 +231,7 @@ void TreeGenerator::find_greedy_split_par(int node_idx){
 		thread_data.xsplit_size = xsplit_size;
 		thread_data.xsplit = xsplit;
 		thread_data.feature = this->column_subsample[c];
-		//std::cout<<std::endl;
+
 		for (int i = 0; i < this->num_threads; i++){
 			thread_data.thread_id = i;
 			threads[i] = std::thread(bestSplit,std::ref(mutex_variable),thread_data);
@@ -259,7 +258,6 @@ void TreeGenerator::find_greedy_split_par(int node_idx){
 	node_stack.push(left_child_idx);
 	node_stack.push(right_child_idx);
 	
-	 //delete thread_data.treeGen;
 	
 }
 
@@ -286,7 +284,7 @@ void TreeGenerator::find_varsplit_par(){
 
 void bestSplit_feat(std::mutex& m,split_data data){
 
-	for (int c = data.thread_id;c < (data.treeGen->column_subsample).size();c+= data.num_threads ){
+	for (int c = data.thread_id;c < (data.treeGen->column_subsample).size(); c+= data.num_threads ){
 		std::vector<double> xsplit;
 		
 		// on selectionne les valeurs d'une caracteristiques donnee suivant un certain nombre d'indice
@@ -294,10 +292,6 @@ void bestSplit_feat(std::mutex& m,split_data data){
 			xsplit.emplace_back(data.treeGen->x[idx][data.treeGen->column_subsample[c]]);
 		}
 		int xsplit_size = xsplit.size();
-		
-		//data.xsplit_size = xsplit_size;
-		//data.xsplit = xsplit;
-		//std::cout<<std::endl;
 		
 		for(int r = 0; r < xsplit_size; r++){
 			std::vector<int> lhs_indices, rhs_indices;
@@ -402,15 +396,12 @@ void TreeGenerator::find_greedy_split_par_feat(int node_idx){
 	int right_child_idx = tree.size();
 	tree.emplace_back(Node(thread_data.treeGen->rhsF,tree[node_idx].depth+1,0.0, -1000.0,-1, 0.0, -1,-1));
 	
-	//std::cout<<node_idx<<" "<<node_tree_size<<" "<<tree[node_idx].idxs[0]<<" "<<tree[node_idx].idxs[1]<<" "<<tree.size()<<std::endl;
-	
 	tree[node_idx].left = left_child_idx;
 	tree[node_idx].right = right_child_idx;
 
 	node_stack.push(left_child_idx);
 	node_stack.push(right_child_idx);
 	
-	 //delete thread_data.treeGen;
 	
 }
 
@@ -427,12 +418,154 @@ void TreeGenerator::find_varsplit_par_feat(){
     	
     	int node_idx = node_stack.top();
     	node_stack.pop();
-    	//std::cout<<node_idx<<std::endl;
     	this->find_greedy_split_par_feat(node_idx);
     	
     }
-    //std::cout<<std::endl;
 }
+
+
+
+void bestSplit_feat_plus_SplitPoint(std::mutex& m,split_data data){
+
+	for (int c = data.thread_id;c < (data.treeGen->column_subsample).size(); c+= data.num_threads ){
+		std::vector<double> xsplit;
+		
+		// on selectionne les valeurs d'une caracteristiques donnee suivant un certain nombre d'indice
+		for (int idx : data.treeGen->tree[data.node_idx].idxs){
+			xsplit.emplace_back(data.treeGen->x[idx][data.treeGen->column_subsample[c]]);
+		}
+		int xsplit_size = xsplit.size();
+		
+		//data.xsplit_size = xsplit_size;
+		//data.xsplit = xsplit;
+		//std::cout<<std::endl;
+		
+		for(int r = data.thread_id; r < xsplit_size; r+= data.num_threads){
+			std::vector<int> lhs_indices, rhs_indices;
+			std::vector<bool> lhs(xsplit_size, false);
+			std::vector<bool> rhs(xsplit_size, false);
+			int lhs_sum=0;
+			int rhs_sum=0;
+			
+			double lhs_hessian_sum = 0.0, rhs_hessian_sum = 0.0;
+			
+			for (int i = 0; i < xsplit_size; i++){
+				if (xsplit[i] <= xsplit[r]) {
+					lhs[i] = true;
+					//lhs_sum++;
+					lhs_indices.emplace_back(data.treeGen->tree[data.node_idx].idxs[i]);
+					//lhs_hessian_sum += data.hessianS[i];
+				}else{
+					rhs[i] = true;
+					//rhs_sum++;
+					rhs_indices.emplace_back(data.treeGen->tree[data.node_idx].idxs[i]);
+					//rhs_hessian_sum += data.hessianS[i];
+				}
+				
+			}
+			
+			/*if (rhs_sum < data.treeGen->min_leaf || lhs_sum < data.treeGen->min_leaf || rhs_hessian_sum < data.treeGen->min_child_weight || lhs_hessian_sum < data.treeGen->min_child_weight ) {
+				continue;
+				
+			}*/
+			double  curr_score = data.treeGen->gain(lhs,rhs,data.node_idx);
+			m.lock();
+			if (curr_score > data.treeGen->tree[data.node_idx].score){
+				data.treeGen->tree[data.node_idx].var_idx = data.treeGen->column_subsample[c];
+				data.treeGen->tree[data.node_idx].score  = curr_score;
+				data.treeGen->tree[data.node_idx].split = xsplit[r];
+				data.treeGen->lhsF.clear();
+				data.treeGen->rhsF.clear();
+				data.treeGen->lhsF = lhs_indices;
+				data.treeGen->rhsF = rhs_indices;
+			}
+			
+			m.unlock();
+			
+			lhs_indices.clear();
+			rhs_indices.clear();
+			lhs.clear();
+			rhs.clear();
+			
+		}
+		xsplit.clear();
+	}
+
+}
+	
+void TreeGenerator::find_greedy_split_par_feat_plus_SplitPoint(int node_idx){
+			
+	std::vector<double> gradientS;
+	std::vector<double>  hessianS;
+	
+	std::vector<int> lhsF;
+	std::vector<int>  rhsF;
+	
+	for(int i : tree[node_idx].idxs){
+		gradientS.emplace_back(this->gradient[i]);
+		hessianS.emplace_back(this->hessian[i]);
+		//std::cout<<i<<" ";		
+	}
+	//std::cout<<std::endl;
+	
+	
+	int node_tree_size = tree[node_idx].idxs.size();
+	
+	tree[node_idx].val = this->compute_gamma(gradientS,hessianS);
+	if(node_tree_size <= 1 || tree[node_idx].depth >= this->depth-1){
+
+		return;
+	}
+	
+	std::vector<std::thread> threads(this->num_threads);
+	split_data thread_data;
+	
+	thread_data.hessianS.assign(hessianS.begin(), hessianS.end());
+	thread_data.node_idx = node_idx;
+	thread_data.num_threads = this->num_threads;
+	thread_data.treeGen = this;
+	
+	std::mutex mutex_variable;
+	
+	
+	for (int i = 0; i < this->num_threads; i++){
+		thread_data.thread_id = i;
+		threads[i] = std::thread(bestSplit_feat,std::ref(mutex_variable),thread_data);
+	}
+		
+	for (int i = 0; i < this->num_threads; i++){
+		threads[i].join();
+	}
+	
+	//ajout des noeuds gauche et droit dans notre arbre
+	int left_child_idx = tree.size();
+	tree.emplace_back(Node(thread_data.treeGen->lhsF,tree[node_idx].depth+1,0.0, -1000.0,-1, 0.0, -1,-1));
+	int right_child_idx = tree.size();
+	tree.emplace_back(Node(thread_data.treeGen->rhsF,tree[node_idx].depth+1,0.0, -1000.0,-1, 0.0, -1,-1));
+	
+	tree[node_idx].left = left_child_idx;
+	tree[node_idx].right = right_child_idx;
+
+	node_stack.push(left_child_idx);
+	node_stack.push(right_child_idx);
+	
+	
+}
+
+
+void TreeGenerator::find_varsplit_par_feat_plus_SplitPoint(){
+
+    tree.emplace_back(Node(this->idxs, 0, 0.0,-1000.0,-1, 0.0, -1,-1));
+    node_stack.push(0);
+    
+    while(!node_stack.empty()){
+    	// ici on continu l'entrainnement
+    	int node_idx = node_stack.top();
+    	node_stack.pop();
+    	this->find_greedy_split_par_feat_plus_SplitPoint(node_idx);
+    }
+}
+
 
 void TreeGenerator::find_greedy_split_seq(int node_idx){	
 	std::vector<double> gradientS;
@@ -990,7 +1123,7 @@ int main(int argc, char * argv[]) {
 	std::cout<<"sequential execution in progress..."<<std::endl;
 	XGBoostClassifier xgb;
 	top3();
-	std::vector<double> loss = xgb.fit(x, y,1,1,8,1,0.1,100,0.2, 0.1,num_threads,0);
+	std::vector<double> loss = xgb.fit(x, y,1,1,9,1,0.1,100,0.2, 0.1,num_threads,0);
 	top4();
 	
 	long temps = cpu_time_2();
@@ -1040,30 +1173,42 @@ int main(int argc, char * argv[]) {
 		std::cout<<"parallel execution per feature in progress..."<<std::endl;
 		XGBoostClassifier xgb1;
 		top3();
-		std::vector<double> loss1 =xgb1.fit(x, y,1,1,8,1,0.1,100,0.2, 0.1,i,1);
+		std::vector<double> loss1 =xgb1.fit(x, y,1,1,9,1,0.1,100,0.2, 0.1,i,1);
 		top4();
 
 		long temps1 = cpu_time_2();
 		printf("\ntime par feat = %ld.%03ldms\n\n", temps1/1000, temps1%1000);
-		
 		printf("\n");
 		
 		// execution parallel par split point
 		std::cout<<"parallel execution per split point in progress..."<<std::endl;
 		XGBoostClassifier xgb2;
 		top3();
-		std::vector<double> loss2 =xgb2.fit(x, y,1,1,8,1,0.1,100,0.2, 0.1,i,2);
+		std::vector<double> loss2 =xgb2.fit(x, y,1,1,9,1,0.1,100,0.2, 0.1,i,2);
 		top4();
+
+		long temps2 = cpu_time_2();
+		printf("\ntime par split point = %ld.%03ldms\n\n", temps2/1000, temps2%1000);
+
+		// execution parallel par feature plus split point
+		std::cout<<"parallel execution per feature plus split point in progress..."<<std::endl;
+		XGBoostClassifier xgb3;
+		top3();
+		std::vector<double> loss3 =xgb3.fit(x, y,1,1,9,1,0.1,100,0.2, 0.1,i,3);
+		top4();
+
+		long temps3 = cpu_time_2();
+		printf("\ntime par split point plus feature= %ld.%03ldms\n\n", temps3/1000, temps3%1000);
+
 		
 		if(i == num_threads-1){
 			int loss_size1 = loss1.size();
 			for(int i=0;i<loss_size1;i++){
-				csvFileLossPar<<i<<","<<loss1[i]<<","<<loss2[i]<< std::endl;
+				csvFileLossPar<<i<<","<<loss1[i]<<","<<loss2[i]<<","<<loss3[i]<< std::endl;
 			}
 		}
 
-		long temps2 = cpu_time_2();
-		printf("\ntime par split point = %ld.%03ldms\n\n", temps2/1000, temps2%1000);
+		
 		
 		// calcul des speedUp
 		float speedUpFeat =  (temps/1000.0 + temps%1000)/(temps1/1000.0 + temps1%1000);
@@ -1071,7 +1216,11 @@ int main(int argc, char * argv[]) {
 		
 		float speedUpSplitPoint =  (temps/1000.0 + temps%1000)/(temps2/1000.0 + temps2%1000);
 		printf("\nspeedUp split point %.8f\n\n",speedUpSplitPoint);
-		csvFileSPeedUpPerThread<<i<<","<<speedUpFeat<<","<<speedUpSplitPoint<< std::endl;
+
+		float speedUpFeatPlusSplitPoint =  (temps/1000.0 + temps%1000)/(temps3/1000.0 + temps3%1000);
+		printf("\nspeedUpFeatPlusSplitPoint %.8f\n\n",speedUpFeatPlusSplitPoint);
+
+		csvFileSPeedUpPerThread<<i<<","<<speedUpFeat<<","<<speedUpSplitPoint<< ","<<speedUpFeatPlusSplitPoint<<std::endl;
 		loss1.clear();
 		loss2.clear();
 	}
